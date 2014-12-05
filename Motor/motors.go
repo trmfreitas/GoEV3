@@ -5,27 +5,36 @@ import (
 	"fmt"
 	"github.com/mattrajca/GoEV3/utilities"
 	"log"
-	"os"
+	"io/ioutil"
+	"strings"
 )
 
 // Constants for output ports.
 type OutPort string
 
 const (
-	OutPortA OutPort = "A"
-	OutPortB         = "B"
-	OutPortC         = "C"
-	OutPortD         = "D"
+	OutPortA OutPort = "outA"
+	OutPortB         = "outB"
+	OutPortC         = "outC"
+	OutPortD         = "outD"
 )
 
-func findFilename(port OutPort) string {
-	filename := fmt.Sprintf("/sys/class/tacho-motor/out%s:motor:tacho", string(port))
 
-	if _, err := os.Stat(filename); os.IsNotExist(err) {
-		log.Fatal("Cannot connect to motor %s", port)
+func findFilename(port OutPort) string {
+	motors, _ := ioutil.ReadDir("/sys/class/tacho-motor")
+	for _, item := range motors {
+		if strings.HasPrefix(item.Name(), "motor") {
+			motorPath := fmt.Sprintf("/sys/class/tacho-motor/%s", item.Name())
+			portr := utilities.ReadStringValue(motorPath, "port_name")
+			if OutPort(portr) == port {
+				return fmt.Sprintf("/sys/class/tacho-motor/%s", item.Name())
+			}
+		}
 	}
 
-	return filename
+	log.Fatalf("Could not find %v motor\n", port)
+
+	return ""
 }
 
 // Runs the motor at the given port.
@@ -36,7 +45,7 @@ func Run(port OutPort, speed int16) {
 	}
 
 	utilities.WriteIntValue(findFilename(port), "run", 1)
-	utilities.WriteIntValue(findFilename(port), "speed_setpoint", int64(speed))
+	utilities.WriteIntValue(findFilename(port), "duty_cycle_sp", int64(speed))
 }
 
 // Stops the motor at the given port.
@@ -46,7 +55,7 @@ func Stop(port OutPort) {
 
 // Reads the operating speed of the motor at the given port.
 func CurrentSpeed(port OutPort) int16 {
-	return utilities.ReadInt16Value(findFilename(port), "speed")
+	return utilities.ReadInt16Value(findFilename(port), "duty_cycle_sp")
 }
 
 // Reads the operating power of the motor at the given port.
@@ -66,10 +75,10 @@ func DisableRegulationMode(port OutPort) {
 
 // Enables brake mode, causing the motor at the given port to brake to stops.
 func EnableBrakeMode(port OutPort) {
-	utilities.WriteStringValue(findFilename(port), "brake_mode", "on")
+	utilities.WriteStringValue(findFilename(port), "stop_mode", "break")
 }
 
 // Disables brake mode, causing the motor at the given port to coast to stops. Brake mode is off by default.
 func DisableBrakeMode(port OutPort) {
-	utilities.WriteStringValue(findFilename(port), "brake_mode", "off")
+	utilities.WriteStringValue(findFilename(port), "stop_mode", "coast")
 }
